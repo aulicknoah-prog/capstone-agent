@@ -1,0 +1,172 @@
+{
+  "name": "Gym Onboarding and Reminder Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "gym-onboarding",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "id": "1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.member_id}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Input Guard",
+      "type": "n8n-nodes-base.if",
+      "position": [450, 300],
+      "id": "2"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a gym onboarding agent. Decide whether to send a waiver, reminder, or escalation based on member status."
+            },
+            {
+              "role": "user",
+              "content": "={{$json.body}}"
+            }
+          ]
+        }
+      },
+      "name": "Agent Core",
+      "type": "n8n-nodes-base.openAi",
+      "position": [650, 300],
+      "id": "3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.action}}",
+              "value2": "send_waiver",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "name": "Tool Guard",
+      "type": "n8n-nodes-base.switch",
+      "position": [850, 300],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.SMTP_USER}}",
+        "toEmail": "={{$json.email}}",
+        "subject": "Please sign your gym waiver",
+        "text": "Hi, please sign your waiver before your first class."
+      },
+      "name": "Waiver Sender",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1050, 200],
+      "id": "5"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.SMTP_USER}}",
+        "toEmail": "={{$json.email}}",
+        "subject": "Reminder: Sign your waiver",
+        "text": "This is a reminder to sign your waiver before your class."
+      },
+      "name": "Reminder Sender",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1050, 350],
+      "id": "6"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.SMTP_USER}}",
+        "toEmail": "staff@gym.com",
+        "subject": "Escalation: Member has not signed waiver",
+        "text": "Member ={{$json.member_id}} has not signed their waiver after 2 reminders."
+      },
+      "name": "Escalation Notifier",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1050, 500],
+      "id": "7"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "spreadsheetId": "your-sheet-id",
+        "range": "Logs!A:E",
+        "values": {
+          "values": [
+            {
+              "value": "={{$json.member_id}}"
+            },
+            {
+              "value": "={{$json.action}}"
+            },
+            {
+              "value": "={{$json.status}}"
+            },
+            {
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        }
+      },
+      "name": "Google Sheets Logger",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1250, 300],
+      "id": "8"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"success\", \"action\": \"={{$json.action}}\"}"
+      },
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1450, 300],
+      "id": "9"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Input Guard", "type": "main", "index": 0}]]
+    },
+    "Input Guard": {
+      "main": [[{"node": "Agent Core", "type": "main", "index": 0}]]
+    },
+    "Agent Core": {
+      "main": [[{"node": "Tool Guard", "type": "main", "index": 0}]]
+    },
+    "Tool Guard": {
+      "main": [
+        [{"node": "Waiver Sender", "type": "main", "index": 0}],
+        [{"node": "Reminder Sender", "type": "main", "index": 0}],
+        [{"node": "Escalation Notifier", "type": "main", "index": 0}]
+      ]
+    },
+    "Waiver Sender": {
+      "main": [[{"node": "Google Sheets Logger", "type": "main", "index": 0}]]
+    },
+    "Reminder Sender": {
+      "main": [[{"node": "Google Sheets Logger", "type": "main", "index": 0}]]
+    },
+    "Escalation Notifier": {
+      "main": [[{"node": "Google Sheets Logger", "type": "main", "index": 0}]]
+    },
+    "Google Sheets Logger": {
+      "main": [[{"node": "Response", "type": "main", "index": 0}]]
+    }
+  }
+}
